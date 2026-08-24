@@ -1,8 +1,25 @@
 # CS-30 Personalised RAG
 
-Week 1 implementation of a personalised AI learning assistant using a small
-OpenStax Physics thin slice. The current milestone validates the engineering
-path only; it does not report formal retrieval or model-effectiveness results.
+Semester-long capstone repository for a personalised AI learning assistant
+using Retrieval-Augmented Generation and Large Language Models. It contains
+the system implementation, experiments, documentation, and final delivery
+assets for the complete CS-30 project.
+
+The current milestone is `v0.1-thin-slice`: a small OpenStax Physics path used
+to validate the engineering workflow. It does not report formal retrieval or
+model-effectiveness results.
+
+## Repository scope
+
+This is the single source repository for the whole project, including:
+
+1. Week 1 thin-slice integration and staging demo.
+2. Dataset preparation, Evidence Alignment, and evaluation infrastructure.
+3. Dense and hybrid retrieval experiments.
+4. Student profiles, personalised retrieval, and personalised prompting.
+5. Reliability controls, citation checks, and calibrated abstention.
+6. Optional restricted knowledge-graph extensions.
+7. Multi-model experiments, analysis, LaTeX report, and final demonstration.
 
 ## Week 1 scope
 
@@ -68,4 +85,3 @@ The first contract version includes:
 - `GeneratedAnswer`
 
 See [docs/interfaces.md](docs/interfaces.md) for ownership and field semantics.
-
