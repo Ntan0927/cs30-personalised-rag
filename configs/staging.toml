@@ -1,0 +1,13 @@
+environment = "staging"
+log_level = "INFO"
+fixture_mode = false
+
+[retrieval]
+top_k = 5
+index_type = "IndexFlatIP"
+
+[generation]
+provider = "pending"
+temperature = 0.0
+max_retries = 2
+

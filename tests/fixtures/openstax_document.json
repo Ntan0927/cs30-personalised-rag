@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "document_id": "openstax_physics_fixture",
+  "title": "OpenStax Physics Fixture",
+  "version": "fixture-v1",
+  "source": "fixture://openstax/physics",
+  "document_hash": "fixture-only-not-a-real-document-hash",
+  "parser_version": "fixture-parser-1.0",
+  "text": "Acceleration is the rate of change of velocity with time. Its SI unit is metres per second squared. A positive acceleration can increase velocity in the chosen positive direction.",
+  "chapters": [
+    {
+      "chapter_id": "ch01_motion",
+      "title": "Motion",
+      "char_start": 0,
+      "char_end": 179,
+      "page_start": 1,
+      "page_end": 1
+    }
+  ]
+}
+

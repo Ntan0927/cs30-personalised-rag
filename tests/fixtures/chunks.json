@@ -1,0 +1,39 @@
+[
+  {
+    "schema_version": "1.0",
+    "chunk_id": "chunk_ch01_0001",
+    "document_id": "openstax_physics_fixture",
+    "chapter_id": "ch01_motion",
+    "text": "Acceleration is the rate of change of velocity with time.",
+    "source": "fixture://openstax/physics#ch01_motion",
+    "char_start": 0,
+    "char_end": 57,
+    "token_count": 11,
+    "metadata": {"topic": "acceleration"}
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "chunk_ch01_0002",
+    "document_id": "openstax_physics_fixture",
+    "chapter_id": "ch01_motion",
+    "text": "Its SI unit is metres per second squared.",
+    "source": "fixture://openstax/physics#ch01_motion",
+    "char_start": 58,
+    "char_end": 99,
+    "token_count": 9,
+    "metadata": {"topic": "acceleration"}
+  },
+  {
+    "schema_version": "1.0",
+    "chunk_id": "chunk_ch01_0003",
+    "document_id": "openstax_physics_fixture",
+    "chapter_id": "ch01_motion",
+    "text": "A positive acceleration can increase velocity in the chosen positive direction.",
+    "source": "fixture://openstax/physics#ch01_motion",
+    "char_start": 100,
+    "char_end": 179,
+    "token_count": 12,
+    "metadata": {"topic": "acceleration"}
+  }
+]
+

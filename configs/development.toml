@@ -1,0 +1,13 @@
+environment = "development"
+log_level = "DEBUG"
+fixture_mode = true
+
+[retrieval]
+top_k = 3
+index_type = "IndexFlatIP"
+
+[generation]
+provider = "mock"
+temperature = 0.0
+max_retries = 2
+

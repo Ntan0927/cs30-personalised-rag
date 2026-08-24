@@ -1,0 +1,47 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+dist/
+build/
+
+# Runtime outputs and large artifacts
+data/raw/*
+data/private/
+data/processed/
+models/
+indexes/
+artifacts/
+logs/
+cache/
+*.faiss
+*.index
+
+# Keep placeholder files in ignored data directories
+!data/raw/.gitkeep
+
+# Local document-generation and QA intermediates
+.tmp/
+tmp/
+docs/_render*/
+*.docx
+*.pdf
+PG Projects Details - Semester 2 2026.xlsx
+
+# IDE and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
