@@ -28,6 +28,36 @@ would block interface, parsing, chunking, integration, and UI work.
 - BM25/RRF comparisons
 - Abstention calibration, restricted KG, and multi-model comparison
 
+## Revision, 2026-08-24 (before module development began)
+
+Version 1.0 was revised in place rather than superseded, because no module yet
+produced data in the old shape. Three defects made the original shape unusable:
+
+1. **Contract-level whitespace stripping broke the character-span invariant.**
+   The base model normalised every string, so a chunk whose text began or ended
+   with whitespace was silently shortened while its offsets were not, and
+   validation still passed. Text bound to a span is now kept verbatim; only
+   identifiers and span-free free text are normalised, and `Chunk` asserts
+   `len(text) == char_end - char_start`.
+
+2. **The contract could not express "no evidence" or "cannot answer".**
+   `RetrievalResult.hits` and `GeneratedAnswer.citations` both required at least
+   one entry, so retrieval could not report an empty result and the generator
+   could not refuse. Refusal is a stated goal of the project, so both lists may
+   now be empty, and `GeneratedAnswer.abstained` distinguishes a refusal from an
+   ungrounded answer. A non-abstained answer must still cite evidence.
+
+3. **The index builder had no explicit hand-off to retrieval.** `build()` and
+   `load()` returned nothing, so members 5 and 6 could not agree on which index,
+   chunk map, or configuration was being used. Both now return an
+   `IndexArtifact`, and `Retriever.load_index()` accepts that manifest.
+
+`PipelineRun` was added at the same time to carry run metadata, so a later
+ablation-table row can be traced back to the configuration that produced it.
+
+Freezing exists to stop churn during development, not to preserve a defect
+discovered before development started.
+
 ## Consequences
 
 The team can develop in parallel against fixtures and replace adapters without

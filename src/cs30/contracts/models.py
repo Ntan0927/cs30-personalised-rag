@@ -3,21 +3,34 @@
 Character spans use Python slicing semantics: ``char_start`` is inclusive and
 ``char_end`` is exclusive. Unknown fields are rejected so interface drift is
 detected during integration rather than silently ignored.
+
+The contract layer never rewrites payload data. Fields holding verbatim
+textbook text are bound to a character span, so stripping them would move the
+text without moving the offsets. Only identifier-like and free-text fields are
+normalised.
 """
 
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 ChoiceLabel = Literal["A", "B", "C", "D"]
-NonEmptyText = Annotated[str, Field(min_length=1)]
+
+# Identifiers and provenance labels: surrounding whitespace carries no meaning.
+Identifier = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+# Free text without span semantics; normalisation is safe.
+NonEmptyText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+
+# Verbatim source text bound to ``char_start`` / ``char_end``. Never stripped.
+SpanText = Annotated[str, Field(min_length=1)]
 
 
 class ContractModel(BaseModel):
     """Strict base model for frozen cross-module contracts."""
 
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid")
 
 
 class StudentLevel(StrEnum):
@@ -27,7 +40,7 @@ class StudentLevel(StrEnum):
 
 
 class OpenStaxChapter(ContractModel):
-    chapter_id: NonEmptyText
+    chapter_id: Identifier
     title: NonEmptyText
     char_start: int = Field(ge=0)
     char_end: int = Field(gt=0)
@@ -45,13 +58,13 @@ class OpenStaxChapter(ContractModel):
 
 class OpenStaxDocument(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
-    document_id: NonEmptyText
+    document_id: Identifier
     title: NonEmptyText
-    version: NonEmptyText
-    source: NonEmptyText
-    document_hash: NonEmptyText
-    parser_version: NonEmptyText
-    text: NonEmptyText
+    version: Identifier
+    source: Identifier
+    document_hash: Identifier
+    parser_version: Identifier
+    text: SpanText
     chapters: list[OpenStaxChapter] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -72,11 +85,11 @@ class OpenStaxDocument(ContractModel):
 
 class Chunk(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
-    chunk_id: NonEmptyText
-    document_id: NonEmptyText
-    chapter_id: NonEmptyText
-    text: NonEmptyText
-    source: NonEmptyText
+    chunk_id: Identifier
+    document_id: Identifier
+    chapter_id: Identifier
+    text: SpanText
+    source: Identifier
     char_start: int = Field(ge=0)
     char_end: int = Field(gt=0)
     token_count: int = Field(gt=0)
@@ -86,18 +99,35 @@ class Chunk(ContractModel):
     def validate_span(self) -> "Chunk":
         if self.char_end <= self.char_start:
             raise ValueError("char_end must be greater than char_start")
+        expected = self.char_end - self.char_start
+        if len(self.text) != expected:
+            raise ValueError(
+                f"text length {len(self.text)} does not match span "
+                f"[{self.char_start}, {self.char_end}) of length {expected}"
+            )
         return self
+
+
+class IndexArtifact(ContractModel):
+    """Portable manifest connecting an index builder to a retriever."""
+
+    schema_version: Literal["1.0"] = "1.0"
+    artifact_id: Identifier
+    index_type: Identifier
+    location: Identifier
+    chunk_count: int = Field(gt=0)
+    metadata: dict[str, str] = Field(default_factory=dict)
 
 
 class SciQQuestion(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
-    question_id: NonEmptyText
+    question_id: Identifier
     question: NonEmptyText
     choices: dict[ChoiceLabel, NonEmptyText]
     correct_choice: ChoiceLabel
     support: NonEmptyText
     in_scope: bool = True
-    source: NonEmptyText = "SciQ"
+    source: Identifier = "SciQ"
 
     @model_validator(mode="after")
     def validate_choices(self) -> "SciQQuestion":
@@ -107,18 +137,25 @@ class SciQQuestion(ContractModel):
 
 
 class RetrievalHit(ContractModel):
-    chunk_id: NonEmptyText
-    text: NonEmptyText
-    chapter_id: NonEmptyText
-    source: NonEmptyText
+    chunk_id: Identifier
+    text: SpanText
+    chapter_id: Identifier
+    source: Identifier
     score: float
     rank: int = Field(ge=1)
 
 
 class RetrievalResult(ContractModel):
+    """Top-K evidence for one query.
+
+    An empty ``hits`` list is a valid, meaningful answer: retrieval ran and
+    found nothing relevant. That is distinct from an index or input failure,
+    which raises instead.
+    """
+
     schema_version: Literal["1.0"] = "1.0"
     query: NonEmptyText
-    hits: list[RetrievalHit] = Field(min_length=1)
+    hits: list[RetrievalHit] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_ranks(self) -> "RetrievalResult":
@@ -132,21 +169,53 @@ class RetrievalResult(ContractModel):
 
 class StudentProfile(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
-    profile_id: NonEmptyText
+    profile_id: Identifier
     level: StudentLevel
     topic_levels: dict[str, StudentLevel] = Field(default_factory=dict)
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class GeneratedAnswer(ContractModel):
+    """A grounded answer, or an explicit refusal to answer.
+
+    Abstention is a first-class outcome rather than an error: the model may
+    report that the retrieved evidence does not support an answer.
+    """
+
     schema_version: Literal["1.0"] = "1.0"
     final_choice: ChoiceLabel | None = None
     explanation: NonEmptyText
-    citations: list[NonEmptyText] = Field(min_length=1)
+    citations: list[Identifier] = Field(default_factory=list)
+    abstained: bool = False
 
     @model_validator(mode="after")
-    def validate_unique_citations(self) -> "GeneratedAnswer":
+    def validate_answer(self) -> "GeneratedAnswer":
         if len(set(self.citations)) != len(self.citations):
             raise ValueError("citations must be unique")
+        if self.abstained:
+            if self.final_choice is not None:
+                raise ValueError("an abstained answer must not select a final_choice")
+            if self.citations:
+                raise ValueError("an abstained answer must not cite evidence")
+        elif not self.citations:
+            raise ValueError("a non-abstained answer must cite at least one chunk")
         return self
 
+
+class PipelineRun(ContractModel):
+    """One end-to-end execution, including everything needed to reproduce it.
+
+    ``metadata`` carries run parameters (model, top_k, latency, token usage) so
+    a row in a later ablation table can be traced back to its configuration.
+    """
+
+    schema_version: Literal["1.0"] = "1.0"
+    run_id: Identifier
+    mode: Literal["fixture", "real"]
+    question: NonEmptyText
+    question_id: Identifier | None = None
+    profile: StudentProfile
+    retrieval: RetrievalResult
+    answer: GeneratedAnswer
+    citation_integrity: Literal["passed", "failed", "skipped"]
+    metadata: dict[str, str] = Field(default_factory=dict)

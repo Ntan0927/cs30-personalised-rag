@@ -10,4 +10,3 @@ index_type = "IndexFlatIP"
 provider = "mock"
 temperature = 0.0
 max_retries = 2
-

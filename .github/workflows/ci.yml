@@ -8,11 +8,15 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install project
         run: python -m pip install -e ".[dev]"
@@ -20,9 +24,24 @@ jobs:
         run: python -m ruff check .
       - name: Test
         run: python -m pytest
-      - name: Smoke test
-        run: >-
-          python -m cs30.pipeline
-          --question "What is acceleration?"
-          --level beginner
 
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install as a real user would
+        run: python -m pip install .
+      - name: Grounded answer
+        run: |
+          cd "$(mktemp -d)"
+          cs30-demo --question "What is acceleration?" --level beginner \
+            | python -c "import json,sys; r=json.load(sys.stdin); assert r['mode']=='fixture'; assert r['answer']['citations']; assert set(r['answer']['citations']) <= {h['chunk_id'] for h in r['retrieval']['hits']}, 'citation not grounded in retrieval'"
+      - name: Out-of-scope question must abstain, not fabricate
+        run: |
+          cd "$(mktemp -d)"
+          cs30-demo --question "What is quantum entanglement?" --level advanced \
+            | python -c "import json,sys; r=json.load(sys.stdin); assert r['answer']['abstained'] is True, 'pipeline answered without evidence'; assert r['retrieval']['hits']==[]; assert r['answer']['citations']==[]"
