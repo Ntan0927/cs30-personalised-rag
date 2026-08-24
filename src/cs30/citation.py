@@ -1,6 +1,7 @@
 """Runtime citation-integrity checks."""
 
 from cs30.contracts import GeneratedAnswer, RetrievalResult
+from cs30.errors import CitationIntegrityError
 
 
 def validate_citations(answer: GeneratedAnswer, retrieval: RetrievalResult) -> None:
@@ -9,5 +10,6 @@ def validate_citations(answer: GeneratedAnswer, retrieval: RetrievalResult) -> N
     allowed = {hit.chunk_id for hit in retrieval.hits}
     invalid = sorted(set(answer.citations) - allowed)
     if invalid:
-        raise ValueError(f"answer contains unknown citation IDs: {', '.join(invalid)}")
-
+        raise CitationIntegrityError(
+            f"answer contains unknown citation IDs: {', '.join(invalid)}"
+        )

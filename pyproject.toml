@@ -24,6 +24,10 @@ cs30-demo = "cs30.pipeline:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"cs30" = ["configs/*.toml"]
+"cs30.fixtures" = ["*.json"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
