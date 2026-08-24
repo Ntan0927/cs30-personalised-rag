@@ -33,7 +33,7 @@ The contract layer **never rewrites text that a span points at**.
 
 This distinction is about whether a pair of offsets points at the string. It is
 not about content type: figures and formulas are a separate question, tracked as
-R3 in [risks.md](risks.md).
+R3 in the team planning materials maintained outside GitHub.
 
 ## No evidence, and refusal
 
