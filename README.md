@@ -1,17 +1,19 @@
 # CS-30 Personalised RAG
 
-Semester-long capstone repository for a personalised AI learning assistant
+Source-code repository for a semester-long personalised AI learning assistant
 using Retrieval-Augmented Generation and Large Language Models. It contains
-the system implementation, experiments, documentation, and final delivery
-assets for the complete CS-30 project.
+the runnable implementation, small test fixtures, engineering contracts, and
+essential technical documentation. Planning documents, source materials, and
+large project assets are maintained separately in the team Google Drive.
 
 The current milestone is `v0.1-thin-slice`: a small OpenStax Physics path used
 to validate the engineering workflow. It does not report formal retrieval or
 model-effectiveness results.
 
-## Repository scope
+## Code repository scope
 
-This is the single source repository for the whole project, including:
+This is the source of truth for the project's code and engineering interfaces,
+including:
 
 1. Week 1 thin-slice integration and staging demo.
 2. Dataset preparation, Evidence Alignment, and evaluation infrastructure.
@@ -19,7 +21,15 @@ This is the single source repository for the whole project, including:
 4. Student profiles, personalised retrieval, and personalised prompting.
 5. Reliability controls, citation checks, and calibrated abstention.
 6. Optional restricted knowledge-graph extensions.
-7. Multi-model experiments, analysis, LaTeX report, and final demonstration.
+7. Code supporting multi-model experiments, analysis, and the final demonstration.
+
+## Project files
+
+Official source files, planning documents, report drafts, presentations,
+meeting records, large datasets, model files, indexes, and experiment outputs
+belong in the team Google Drive. They are intentionally excluded by
+`.gitignore` and must not be duplicated as editable copies in this repository.
+A Drive index can be added under `docs/` after the shared folder is created.
 
 ## Week 1 scope
 
