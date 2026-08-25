@@ -12,7 +12,7 @@ Drop the real implementation next to `fixture.py`. The Leader supplies it as the
 - Every chunk has a unique id and a chapter source.
 - Chunk text can be located back in the normalised document.
 - No empty chunks and no cross-chapter mixing.
-- Output feeds member 5 directly.
+- Output feeds member 6 directly.
 
 ## Notes
 
