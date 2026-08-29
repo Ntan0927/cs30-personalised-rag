@@ -5,8 +5,11 @@ Implement `cs30.ports.Retriever`:
     `load_index(artifact: IndexArtifact) -> None`
     `retrieve(query: str, top_k: int) -> RetrievalResult`
 
-Drop the real implementation next to `fixture.py`, then swap it into
-`build_real_deps()` in `src/cs30/pipeline.py`. Nothing else changes.
+`CombinedEvidenceRetriever` is the portable local implementation currently
+wired into `build_real_deps()`. It searches all evidence supplied by the
+original fixture, packaged Member 3 SciQ data, and locally available SciQ rows.
+It uses weighted concept-term coverage with a minimum match threshold and can
+later be replaced by Member 6's dense retriever without changing this interface.
 
 ## Week 1 acceptance
 
@@ -20,3 +23,8 @@ Drop the real implementation next to `fixture.py`, then swap it into
 Finding nothing is NOT an error: return `RetrievalResult` with an empty
 `hits` list and let the generator abstain. Reserve exceptions
 (`IndexUnavailableError`, `EmptyQueryError`) for genuine failures.
+
+The combined retriever is an engineering integration path, not a retrieval
+quality result. Multi-term questions must match at least two meaningful terms,
+which prevents single-word accidents such as `painted` matching a chemistry
+passage about protective paint.

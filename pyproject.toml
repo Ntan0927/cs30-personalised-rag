@@ -20,6 +20,7 @@ dev = [
 
 [project.scripts]
 cs30-demo = "cs30.pipeline:main"
+cs30-task7-demo = "cs30.generation.demo:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

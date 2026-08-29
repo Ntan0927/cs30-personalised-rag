@@ -25,7 +25,7 @@ def test_openstax_document_fixture_is_valid() -> None:
 
 
 def test_sciq_question_requires_exactly_four_choices() -> None:
-    payload = load_fixture("sciq_question.json")
+    payload = load_fixture("sciq_demo_questions.json")[0]
     SciQQuestion.model_validate(payload)
     payload["choices"].pop("D")
     with pytest.raises(ValidationError):
