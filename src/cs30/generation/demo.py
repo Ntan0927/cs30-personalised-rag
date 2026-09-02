@@ -9,7 +9,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
-from cs30.contracts import RetrievalHit, RetrievalResult, StudentLevel
+from cs30.contracts import RetrievalHit, RetrievalMode, RetrievalResult, StudentLevel
 from cs30.logging import get_logger
 from cs30.profile import Week1ProfileProvider
 
@@ -250,13 +250,18 @@ def build_demo_items(level: StudentLevel) -> list[BatchItem]:
             source="fixture://task7-smoke/openstax-style-physics",
             score=1.0,
             rank=1,
+            retriever_type=RetrievalMode.FIXTURE,
         )
         items.append(
             BatchItem(
                 question_id=question_id,
                 question=question,
                 profile=profile,
-                retrieval=RetrievalResult(query=question, hits=[hit]),
+                retrieval=RetrievalResult(
+                    query=question,
+                    mode=RetrievalMode.FIXTURE,
+                    hits=[hit],
+                ),
             )
         )
     return items

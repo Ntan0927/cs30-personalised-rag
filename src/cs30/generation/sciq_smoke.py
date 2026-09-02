@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from cs30.contracts import (
     RetrievalHit,
+    RetrievalMode,
     RetrievalResult,
     SciQQuestion,
     StudentLevel,
@@ -167,13 +168,18 @@ def build_sciq_smoke_items(
             source="fixture://sciq-support/train",
             score=1.0,
             rank=1,
+            retriever_type=RetrievalMode.FIXTURE,
         )
         items.append(
             BatchItem(
                 question_id=question.question_id,
                 question=formatted_question,
                 profile=profile,
-                retrieval=RetrievalResult(query=question.question, hits=[hit]),
+                retrieval=RetrievalResult(
+                    query=question.question,
+                    mode=RetrievalMode.FIXTURE,
+                    hits=[hit],
+                ),
             )
         )
     return items
@@ -191,7 +197,10 @@ def build_free_question_items(
             question_id=question.question_id,
             question=question.question,
             profile=profile,
-            retrieval=RetrievalResult(query=question.question),
+            retrieval=RetrievalResult(
+                query=question.question,
+                mode=RetrievalMode.FIXTURE,
+            ),
         )
         for question in questions
     ]

@@ -5,7 +5,7 @@ from collections import Counter
 import pytest
 
 from cs30.config import load_config
-from cs30.contracts import RetrievalHit, RetrievalResult, StudentLevel
+from cs30.contracts import RetrievalHit, RetrievalMode, RetrievalResult, StudentLevel
 from cs30.errors import GenerationError
 from cs30.generation import (
     BatchItem,
@@ -45,6 +45,7 @@ D. The energy stored in an object"""
 def retrieval(question: str = QUESTION) -> RetrievalResult:
     return RetrievalResult(
         query=question,
+        mode=RetrievalMode.FIXTURE,
         hits=[
             RetrievalHit(
                 chunk_id="chunk_acceleration",
@@ -53,6 +54,7 @@ def retrieval(question: str = QUESTION) -> RetrievalResult:
                 source="fixture://openstax/physics#ch01",
                 score=0.97,
                 rank=1,
+                retriever_type=RetrievalMode.FIXTURE,
             ),
             RetrievalHit(
                 chunk_id="chunk_velocity",
@@ -61,6 +63,7 @@ def retrieval(question: str = QUESTION) -> RetrievalResult:
                 source="fixture://openstax/physics#ch01",
                 score=0.81,
                 rank=2,
+                retriever_type=RetrievalMode.FIXTURE,
             ),
         ],
     )
@@ -302,7 +305,10 @@ def test_empty_retrieval_abstains_without_calling_model() -> None:
     answer = generator.generate(
         "What is outside the corpus?",
         profile,
-        RetrievalResult(query="What is outside the corpus?"),
+        RetrievalResult(
+            query="What is outside the corpus?",
+            mode=RetrievalMode.FIXTURE,
+        ),
     )
 
     assert answer.abstained is True

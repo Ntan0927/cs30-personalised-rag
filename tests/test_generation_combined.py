@@ -1,7 +1,7 @@
 """Behaviour tests for Task 7's portable combined-evidence retriever."""
 
 from cs30.config import load_config
-from cs30.contracts import RetrievalHit, StudentLevel
+from cs30.contracts import RetrievalHit, RetrievalMode, StudentLevel
 from cs30.generation import CombinedEvidenceRetriever
 from cs30.pipeline import build_real_deps, run_pipeline
 
@@ -15,6 +15,7 @@ def evidence() -> list[RetrievalHit]:
             source="fixture://motion",
             score=1.0,
             rank=1,
+            retriever_type=RetrievalMode.FIXTURE,
         ),
         RetrievalHit(
             chunk_id="corrosion",
@@ -23,6 +24,7 @@ def evidence() -> list[RetrievalHit]:
             source="fixture://chemistry",
             score=1.0,
             rank=1,
+            retriever_type=RetrievalMode.FIXTURE,
         ),
     ]
 
@@ -35,6 +37,8 @@ def test_combined_retriever_returns_relevant_ranked_evidence() -> None:
 
     assert [hit.chunk_id for hit in result.hits] == ["acceleration"]
     assert [hit.rank for hit in result.hits] == [1]
+    assert result.mode is RetrievalMode.BM25
+    assert all(hit.retriever_type is RetrievalMode.BM25 for hit in result.hits)
 
 
 def test_combined_retriever_rejects_single_word_accidental_overlap() -> None:
