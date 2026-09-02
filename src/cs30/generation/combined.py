@@ -1,4 +1,4 @@
-"""Local Top-K retrieval over every evidence passage available to Task 7."""
+"""Task-7 local Top-K retrieval over its available smoke evidence."""
 
 from __future__ import annotations
 

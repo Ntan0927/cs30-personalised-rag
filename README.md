@@ -123,11 +123,11 @@ python -m cs30.generation.demo --provider mock
 
 By default it combines the original 20-question fixture, Member 3's packaged
 24-question SciQ set and 8 free questions, plus the local 20-row SciQ file when
-`data/raw/sciq/train_first_20.json` exists. Each output row records its dataset
-source. Use `--dataset original`, `--dataset team`, or `--dataset local-sciq`
-to run one group. See [the Member 7 guide](docs/member7-week1-guide.md) for real
-provider setup and the Member 3/6 hand-off. The 8 free questions explicitly
-abstain until a retriever supplies matching evidence.
+`data/raw/sciq/train_first_20.json` exists. Set `CS30_LOCAL_SCIQ_PATH` to use a
+different local file. Each output row records its dataset source. Use
+`--dataset original`, `--dataset team`, or `--dataset local-sciq` to run one
+group. The 8 free questions explicitly abstain until a retriever supplies
+matching evidence.
 
 To use a real model without API fees, install Ollama, run
 `ollama run gpt-oss:20b` once, then smoke-test the existing generation path:

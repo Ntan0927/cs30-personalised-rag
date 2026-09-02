@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cs30.contracts import RetrievalHit, RetrievalResult, StudentLevel
+from cs30.logging import get_logger
 from cs30.profile import Week1ProfileProvider
 
 from .batch import BatchItem, generate_batch
@@ -39,7 +40,11 @@ ALL_DATASETS_NOTICE = (
     "this is not a retrieval or model-effectiveness result."
 )
 
-DEFAULT_LOCAL_SCIQ_PATH = Path("data/raw/sciq/train_first_20.json")
+DEFAULT_LOCAL_SCIQ_PATH = Path(
+    os.environ.get("CS30_LOCAL_SCIQ_PATH", "data/raw/sciq/train_first_20.json")
+)
+
+LOGGER = get_logger("generation.demo")
 
 ORIGINAL_DATASET = "member7-original-fixture"
 TEAM_SCIQ_DATASET = "member3-packaged-sciq"
@@ -295,16 +300,24 @@ def build_all_dataset_items(
     team_free = load_packaged_free_questions()
     add(build_free_question_items(team_free, level), TEAM_FREE_DATASET)
 
-    if local_sciq_path is not None and local_sciq_path.exists():
-        local_sciq = load_sciq_questions(local_sciq_path)
-        add(build_sciq_smoke_items(local_sciq, level), LOCAL_SCIQ_DATASET)
-        gold_choices.update(
-            {
-                question.question_id: question.correct_choice
-                for question in local_sciq
-                if question.question_id in sources
-            }
-        )
+    if local_sciq_path is not None:
+        if local_sciq_path.is_file():
+            local_sciq = load_sciq_questions(local_sciq_path)
+            add(build_sciq_smoke_items(local_sciq, level), LOCAL_SCIQ_DATASET)
+            gold_choices.update(
+                {
+                    question.question_id: question.correct_choice
+                    for question in local_sciq
+                    if question.question_id in sources
+                }
+            )
+        else:
+            LOGGER.warning(
+                "local SciQ dataset not found at %s; running with %d packaged "
+                "dataset sources",
+                local_sciq_path,
+                len(set(sources.values())),
+            )
 
     return DemoDataset(items=items, sources=sources, gold_choices=gold_choices)
 
@@ -336,7 +349,8 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Local Hugging Face rows JSON. Included by --dataset all and required by "
-            "--dataset local-sciq; defaults to data/raw/sciq/train_first_20.json"
+            "--dataset local-sciq; defaults to CS30_LOCAL_SCIQ_PATH or "
+            "data/raw/sciq/train_first_20.json"
         ),
     )
     parser.add_argument(
@@ -382,7 +396,7 @@ def main() -> None:
             )
             notice = SCIQ_FIXTURE_NOTICE
         else:
-            if not local_sciq_path.exists():
+            if not local_sciq_path.is_file():
                 raise ValueError(f"local SciQ JSON file does not exist: {local_sciq_path}")
             local_sciq = load_sciq_questions(local_sciq_path)
             local_items = build_sciq_smoke_items(local_sciq, level)

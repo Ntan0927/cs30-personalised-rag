@@ -34,8 +34,9 @@ python -m cs30.generation.demo --provider mock
 On this workspace it writes `artifacts/task7/batch_72_results.json` and
 `artifacts/task7/three_level_sample.json`: 20 original fixture questions, 24
 packaged SciQ questions, 8 packaged free questions, and 20 local SciQ rows.
-The local rows are included when `data/raw/sciq/train_first_20.json` exists.
-These files are ignored by Git and are not model-effectiveness results.
+The local rows are included when `data/raw/sciq/train_first_20.json` exists;
+`CS30_LOCAL_SCIQ_PATH` can point to a different local file. These files are
+ignored by Git and are not model-effectiveness results.
 The packaged free questions have no supplied evidence, so they intentionally
 produce abstentions until Member 6's real retriever is connected.
 
@@ -99,8 +100,5 @@ fixed JSON schema, and still validates the result locally.
 - Member 6: pass `RetrievalResult` directly; no member-7 conversion model is
   required.
 - Leader: `build_real_deps()` now wires `Week1ProfileProvider`, the portable
-  combined retriever, and `PersonalisedAnswerGenerator`. Member 6's later dense
-  retriever can replace the portable retriever behind the unchanged Protocol.
-
-See [`docs/member7-week1-guide.md`](../../../docs/member7-week1-guide.md) for
-the complete implementation and hand-off guide.
+  task-7 combined retriever, and `PersonalisedAnswerGenerator`. Member 6's later
+  dense retriever can replace it behind the unchanged Protocol.

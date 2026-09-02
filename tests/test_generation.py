@@ -4,6 +4,7 @@ from collections import Counter
 
 import pytest
 
+from cs30.config import load_config
 from cs30.contracts import RetrievalHit, RetrievalResult, StudentLevel
 from cs30.errors import GenerationError
 from cs30.generation import (
@@ -29,6 +30,8 @@ from cs30.generation.demo import (
 )
 from cs30.generation.exceptions import LLMProviderError
 from cs30.generation.schema import parse_answer_payload
+from cs30.pipeline import build_real_deps
+from cs30.ports import AnswerGenerator, ProfileProvider, Retriever
 from cs30.profile import Week1ProfileProvider
 from cs30.questions import DemoQuestionProvider
 
@@ -106,6 +109,19 @@ def test_profile_provider_returns_all_three_levels() -> None:
     assert all(profile.confidence == 1.0 for profile in profiles)
 
 
+def test_member7_real_modules_satisfy_their_protocols() -> None:
+    assert isinstance(Week1ProfileProvider(), ProfileProvider)
+    assert isinstance(PersonalisedAnswerGenerator(MockJsonLLMClient()), AnswerGenerator)
+
+
+def test_local_rag_dependencies_keep_frozen_team_protocols() -> None:
+    deps = build_real_deps(load_config("development"))
+
+    assert isinstance(deps.profile_provider, ProfileProvider)
+    assert isinstance(deps.retriever, Retriever)
+    assert isinstance(deps.generator, AnswerGenerator)
+
+
 def test_prompt_contains_profile_question_and_every_retrieved_chunk() -> None:
     profile = Week1ProfileProvider().get(StudentLevel.BEGINNER)
 
@@ -180,14 +196,18 @@ def test_all_dataset_mode_combines_original_teammate_and_local_data(tmp_path) ->
     assert all(not item.retrieval.hits for item in free_items)
 
 
-def test_all_dataset_mode_still_runs_without_ignored_local_file(tmp_path) -> None:
-    dataset = build_all_dataset_items(
-        StudentLevel.INTERMEDIATE,
-        local_sciq_path=tmp_path / "missing.json",
-    )
+def test_all_dataset_mode_warns_without_ignored_local_file(tmp_path, caplog) -> None:
+    missing_path = tmp_path / "missing.json"
+    with caplog.at_level("WARNING", logger="cs30.generation.demo"):
+        dataset = build_all_dataset_items(
+            StudentLevel.INTERMEDIATE,
+            local_sciq_path=missing_path,
+        )
 
     assert len(dataset.items) == 52
     assert LOCAL_SCIQ_DATASET not in dataset.sources.values()
+    assert f"local SciQ dataset not found at {missing_path}" in caplog.text
+    assert "running with 3 packaged dataset sources" in caplog.text
 
 
 def test_hugging_face_sciq_rows_become_grounded_smoke_items(tmp_path) -> None:

@@ -2,6 +2,7 @@
 
 from .batch import BatchItem, BatchResult, generate_batch
 from .client import MockJsonLLMClient, OllamaChatClient, OpenAIResponsesClient
+from .combined import CombinedEvidenceRetriever
 from .fixture import FixtureAnswerGenerator
 from .generator import GenerationTrace, PersonalisedAnswerGenerator
 from .prompt import PromptBuilder, format_sciq_question
@@ -16,6 +17,7 @@ from .sciq_smoke import (
 __all__ = [
     "BatchItem",
     "BatchResult",
+    "CombinedEvidenceRetriever",
     "FixtureAnswerGenerator",
     "GenerationTrace",
     "MockJsonLLMClient",

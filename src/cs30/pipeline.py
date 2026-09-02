@@ -21,6 +21,7 @@ from cs30.config import AppConfig, load_config
 from cs30.contracts import IndexArtifact, PipelineRun, RetrievalHit, StudentLevel
 from cs30.errors import ConfigError, CS30Error, EmptyQueryError
 from cs30.generation import (
+    CombinedEvidenceRetriever,
     FixtureAnswerGenerator,
     MockJsonLLMClient,
     OllamaChatClient,
@@ -40,7 +41,7 @@ from cs30.ports import (
     Retriever,
 )
 from cs30.profile import FixtureProfileProvider, Week1ProfileProvider
-from cs30.retrieval import CombinedEvidenceRetriever, FixtureRetriever
+from cs30.retrieval import FixtureRetriever
 
 LOGGER = get_logger("pipeline")
 

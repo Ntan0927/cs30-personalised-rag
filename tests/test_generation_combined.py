@@ -1,9 +1,9 @@
-"""Behaviour tests for the portable combined-evidence RAG retriever."""
+"""Behaviour tests for Task 7's portable combined-evidence retriever."""
 
 from cs30.config import load_config
 from cs30.contracts import RetrievalHit, StudentLevel
+from cs30.generation import CombinedEvidenceRetriever
 from cs30.pipeline import build_real_deps, run_pipeline
-from cs30.retrieval import CombinedEvidenceRetriever
 
 
 def evidence() -> list[RetrievalHit]:
