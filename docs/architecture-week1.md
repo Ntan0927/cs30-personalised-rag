@@ -110,13 +110,14 @@ The offline and online paths have separate dependency groups:
 - `run_pipeline()` uses `PipelineDeps` for profile → retrieval → generation.
 
 `build_fixture_build_deps()` and `build_fixture_deps()` supply stand-ins. The
-local online path is wired through the same frozen interfaces in
-`build_real_deps()`:
+configured-provider path is wired through the same frozen interfaces in
+`build_real_deps()`. It remains labelled as a fixture run until a real Member 6
+retriever and index replace the portable smoke evidence:
 
 ```python
 def build_real_deps(config: AppConfig) -> PipelineDeps:
     return PipelineDeps(
-        mode="real",
+        mode="fixture",
         profile_provider=Week1ProfileProvider(),
         retriever=CombinedEvidenceRetriever(evidence),
         generator=PersonalisedAnswerGenerator(client),

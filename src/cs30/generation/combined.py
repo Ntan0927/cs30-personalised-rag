@@ -143,7 +143,7 @@ class CombinedEvidenceRetriever:
 
         query_terms = _terms(query)
         if not query_terms:
-            return RetrievalResult(query=query, mode=RetrievalMode.BM25)
+            return RetrievalResult(query=query, mode=RetrievalMode.FIXTURE)
         query_weight = sum(self._idf.get(term, 1.0) for term in query_terms)
         minimum_overlap = 1 if len(query_terms) == 1 else 2
         scored: list[tuple[float, int, _Evidence]] = []
@@ -165,10 +165,10 @@ class CombinedEvidenceRetriever:
                 source=item.source,
                 score=round(score, 4),
                 rank=rank,
-                retriever_type=RetrievalMode.BM25,
+                retriever_type=RetrievalMode.FIXTURE,
             )
             for rank, (score, _overlap_count, item) in enumerate(
                 scored[:top_k], start=1
             )
         ]
-        return RetrievalResult(query=query, mode=RetrievalMode.BM25, hits=hits)
+        return RetrievalResult(query=query, mode=RetrievalMode.FIXTURE, hits=hits)

@@ -121,7 +121,7 @@ def run_build_pipeline(source: Path, deps: BuildDeps) -> IndexArtifact:
 
 
 def build_real_deps(config: AppConfig) -> PipelineDeps:
-    """Build local RAG over every available evidence passage."""
+    """Build configured generation over the available fixture evidence."""
 
     dataset = build_all_dataset_items(StudentLevel.INTERMEDIATE)
     evidence_by_id: dict[str, RetrievalHit] = {}
@@ -152,7 +152,7 @@ def build_real_deps(config: AppConfig) -> PipelineDeps:
         )
 
     return PipelineDeps(
-        mode="real",
+        mode="fixture",
         profile_provider=Week1ProfileProvider(profile_prefix="local-rag"),
         retriever=retriever,
         generator=PersonalisedAnswerGenerator(

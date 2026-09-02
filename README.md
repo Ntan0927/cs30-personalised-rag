@@ -102,7 +102,9 @@ The portable retriever searches every available evidence passage while keeping
 the frozen `Retriever` and `AnswerGenerator` interfaces unchanged. It returns
 an empty result for insufficient matches, causing a grounded abstention rather
 than an unrelated answer. This is a local engineering path, not a formal
-retrieval-effectiveness result.
+retrieval-effectiveness result. Although `--mode real` selects the configured
+model-provider path, its `PipelineRun` and retrieval output remain labelled
+`fixture` until the real Member 6 retriever and index are connected.
 
 For a concise terminal answer, omit `--top-k` to use the configured default of
 3 and add `--answer-only`:
