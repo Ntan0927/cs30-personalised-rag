@@ -8,6 +8,7 @@ import pytest
 from cs30.contracts import Chunk
 from cs30.errors import IndexUnavailableError
 from cs30.indexing import faiss_index
+from cs30.ports import IndexBuilder
 
 
 class FakeSentenceTransformer:
@@ -246,3 +247,16 @@ def test_load_missing_index_raises_error(
 
     with pytest.raises(IndexUnavailableError):
         builder.load()
+
+def test_faiss_builder_implements_index_builder_protocol(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """FaissIndexBuilder should satisfy the shared IndexBuilder protocol."""
+
+    builder = make_builder(
+        monkeypatch,
+        tmp_path,
+    )
+
+    assert isinstance(builder, IndexBuilder)

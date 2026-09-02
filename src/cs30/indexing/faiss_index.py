@@ -1,8 +1,8 @@
 """FAISS index builder for educational RAG chunks."""
 
-from pathlib import Path
 import json
 import time
+from pathlib import Path
 
 import faiss
 import numpy as np
@@ -10,7 +10,27 @@ from sentence_transformers import SentenceTransformer
 
 from cs30.contracts import Chunk, IndexArtifact
 from cs30.errors import IndexUnavailableError
+from cs30.logging import get_logger
 
+LOGGER = get_logger("indexing.faiss")
+
+
+class HFTokenCounter:
+    """Count tokens using the embedding model tokenizer."""
+
+    def __init__(self, model: SentenceTransformer, name: str) -> None:
+        self._tokenizer = model.tokenizer
+        self.name = name
+
+    def count(self, text: str) -> int:
+        """Return the number of tokens without truncation."""
+
+        return len(
+            self._tokenizer.encode(
+                text,
+                add_special_tokens=False,
+            )
+        )
 
 class FaissIndexBuilder:
     """Build, save, and load a FAISS dense vector index."""
@@ -24,12 +44,37 @@ class FaissIndexBuilder:
         self.index_dir = Path(index_dir)
 
         # Load the embedding model.
-        self.model = SentenceTransformer(model_name)
+        self._model: SentenceTransformer | None = None
 
         # These are populated after build() or load().
         self._index = None
         self._chunks: list[Chunk] = []
         self._chunk_map: list[dict[str, object]] = []
+
+    def _warn_if_truncated(self, chunks: list[Chunk]) -> None:
+        """Warn when chunk inputs exceed the embedding model sequence limit."""
+
+        model = self._load_model()
+        limit = getattr(model, "max_seq_length", None)
+
+        if not limit:
+            return
+
+        counter = self.token_counter()
+
+        over_limit = [
+            chunk.chunk_id
+            for chunk in chunks
+            if counter.count(chunk.embedding_input) > limit
+        ]
+
+        if over_limit:
+            LOGGER.warning(
+                "%d/%d chunks exceed max_seq_length=%d and may be truncated",
+                len(over_limit),
+                len(chunks),
+                limit,
+            )
 
     def _embed_chunks(self, chunks: list[Chunk]) -> np.ndarray:
         """Convert chunk.embedding_input values into embedding vectors."""
@@ -40,7 +85,9 @@ class FaissIndexBuilder:
         # to the original chunk text otherwise.
         texts = [chunk.embedding_input for chunk in chunks]
 
-        embeddings = self.model.encode(
+        model = self._load_model()
+        self._warn_if_truncated(chunks)
+        embeddings = model.encode(
             texts,
             convert_to_numpy=True,
         )
@@ -139,6 +186,15 @@ class FaissIndexBuilder:
             {
                 "position": position,
                 "chunk_id": chunk.chunk_id,
+                "document_id": chunk.document_id,
+                "chapter_id": chunk.chapter_id,
+                "text": chunk.text,
+                "source": chunk.source,
+                "char_start": chunk.char_start,
+                "char_end": chunk.char_end,
+                "token_count": chunk.token_count,
+                "metadata": chunk.metadata,
+                "embed_text": chunk.embed_text,
             }
             for position, chunk in enumerate(chunks)
         ]
@@ -160,14 +216,32 @@ class FaissIndexBuilder:
         # ---------------------------------------------------------
         build_time = time.perf_counter() - start_time
 
-        device = str(self.model.device)
+        model = self._load_model()
+        device = str(model.device)
 
         embedding_source = self._get_embedding_source(
             chunks
         )
+        model_short = self.model_name.split("/")[-1]
 
+        strategies = {
+            chunk.metadata.get("strategy", "unknown")
+            for chunk in chunks
+        }
+
+        strategy = (
+            next(iter(strategies))
+            if len(strategies) == 1
+            else "mixed"
+        )
+
+        dimension = embeddings.shape[1]
+
+        artifact_id = (
+            f"faiss-{model_short}-{strategy}-{dimension}"
+        )
         artifact = IndexArtifact(
-            artifact_id="faiss-index-v1",
+            artifact_id=artifact_id,
             index_type="faiss-flat-ip",
             location=str(self.index_dir),
             chunk_count=len(chunks),
@@ -197,6 +271,13 @@ class FaissIndexBuilder:
 
         return artifact
 
+    def _load_model(self) -> SentenceTransformer:
+        """Load the embedding model only when it is first needed."""
+
+        if self._model is None:
+            self._model = SentenceTransformer(self.model_name)
+        return self._model
+    
     def load(self) -> IndexArtifact:
         """Load a previously saved FAISS index and metadata."""
 
@@ -247,6 +328,22 @@ class FaissIndexBuilder:
                 encoding="utf-8",
             ) as file:
                 artifact_data = json.load(file)
+            
+            self._chunks = [
+                Chunk(
+                    chunk_id=item["chunk_id"],
+                    document_id=item["document_id"],
+                    chapter_id=item["chapter_id"],
+                    text=item["text"],
+                    source=item["source"],
+                    char_start=item["char_start"],
+                    char_end=item["char_end"],
+                    token_count=item["token_count"],
+                    metadata=item["metadata"],
+                    embed_text=item["embed_text"],
+                )
+                for item in self._chunk_map
+            ]
 
             artifact = IndexArtifact.model_validate(
                 artifact_data
@@ -258,6 +355,15 @@ class FaissIndexBuilder:
             ) from exc
 
         return artifact
+    def token_counter(self) -> HFTokenCounter:
+        """Return a token counter backed by the embedding model tokenizer."""
+
+        model = self._load_model()
+
+        return HFTokenCounter(
+            model=model,
+            name=self.model_name,
+        )
 
     @property
     def index(self):
@@ -280,3 +386,14 @@ class FaissIndexBuilder:
             )
 
         return self._chunk_map
+
+    @property
+    def chunks(self) -> list[Chunk]:
+        """Return chunks associated with the loaded FAISS index."""
+
+        if not self._chunks:
+            raise IndexUnavailableError(
+                "chunks must be built or loaded before use"
+            )
+
+        return self._chunks

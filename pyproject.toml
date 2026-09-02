@@ -11,8 +11,6 @@ requires-python = ">=3.11"
 dependencies = [
     "pydantic>=2.12,<3",
     "numpy>=1.26,<3",
-    "faiss-cpu>=1.8,<2",
-    "sentence-transformers>=3,<6",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +19,10 @@ dev = [
     "ruff>=0.12,<1",
 ]
 
+ml = [
+    "faiss-cpu>=1.8,<2",
+    "sentence-transformers>=3,<6",
+]
 [project.scripts]
 cs30-demo = "cs30.pipeline:main"
 
