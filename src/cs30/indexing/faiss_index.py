@@ -1,5 +1,5 @@
 """FAISS index builder for educational RAG chunks."""
-
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -8,8 +8,8 @@ import faiss
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-from cs30.contracts import Chunk, IndexArtifact
-from cs30.errors import IndexUnavailableError
+from cs30.contracts import Chunk, EvidenceProvenance, IndexArtifact
+from cs30.errors import ArtifactMismatchError, IndexUnavailableError
 from cs30.logging import get_logger
 
 LOGGER = get_logger("indexing.faiss")
@@ -39,14 +39,14 @@ class FaissIndexBuilder:
         self,
         model_name: str = "sentence-transformers/all-MiniLM-L6-v2",
         index_dir: str = "data/index",
+        expected_provenance: EvidenceProvenance | None = None,
     ) -> None:
         self.model_name = model_name
         self.index_dir = Path(index_dir)
+        self.expected_provenance = expected_provenance
 
-        # Load the embedding model.
         self._model: SentenceTransformer | None = None
 
-        # These are populated after build() or load().
         self._index = None
         self._chunks: list[Chunk] = []
         self._chunk_map: list[dict[str, object]] = []
@@ -132,7 +132,100 @@ class FaissIndexBuilder:
             return "text"
 
         return "mixed"
+        
+    def _get_corpus_hash(self, chunks: list[Chunk]) -> str:
+        """Build a stable identity for the corpus and parser version."""
 
+        corpus_parts = sorted(
+            {
+                (
+                    chunk.metadata["document_hash"],
+                    chunk.metadata["parser_version"],
+                )
+                for chunk in chunks
+            }
+        )
+
+        payload = json.dumps(
+            corpus_parts,
+            separators=(",", ":"),
+        )
+
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+    def _get_chunk_config_hash(self, chunks: list[Chunk]) -> str:
+        """Build a stable identity for the chunking configuration."""
+
+        config_keys = (
+            "strategy",
+            "chunker_version",
+            "tokenizer_name",
+            "target_tokens",
+            "min_tokens",
+            "max_tokens",
+            "respect_section_boundaries",
+        )
+
+        configurations = {
+            tuple(chunk.metadata[key] for key in config_keys)
+            for chunk in chunks
+        }
+
+        if len(configurations) != 1:
+            raise ValueError(
+                "cannot index chunks produced by mixed chunk configurations"
+            )
+
+        configuration = next(iter(configurations))
+
+        payload = json.dumps(
+            dict(zip(config_keys, configuration, strict=True)),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+    def _validate_loaded_artifact(
+        self,
+        artifact: IndexArtifact,
+    ) -> None:
+        """Validate the saved artifact against its chunks and current expectations."""
+
+        try:
+            saved_provenance = EvidenceProvenance(
+                corpus_hash=artifact.metadata["corpus_hash"],
+                chunk_config_hash=artifact.metadata["chunk_config_hash"],
+                embedding_model=artifact.metadata.get("embedding_model"),
+                index_version=artifact.metadata["index_version"],
+            )
+        except (KeyError, ValueError) as exc:
+            raise ArtifactMismatchError(
+                f"index artifact has incomplete provenance metadata: {exc}"
+            ) from exc
+
+        actual_provenance = EvidenceProvenance(
+            corpus_hash=self._get_corpus_hash(self._chunks),
+            chunk_config_hash=self._get_chunk_config_hash(self._chunks),
+            embedding_model=self.model_name,
+            index_version=artifact.metadata["index_version"],
+        )
+
+        if saved_provenance != actual_provenance:
+            raise ArtifactMismatchError(
+                "saved index provenance does not match the persisted chunks "
+                "or current embedding model"
+            )
+
+        if (
+            self.expected_provenance is not None
+            and saved_provenance != self.expected_provenance
+        ):
+            raise ArtifactMismatchError(
+                "saved index provenance does not match the expected "
+                "corpus, chunk configuration, embedding model, or index version"
+            )
     def build(
         self,
         chunks: list[Chunk],
@@ -225,20 +318,28 @@ class FaissIndexBuilder:
         model_short = self.model_name.split("/")[-1]
 
         strategies = {
-            chunk.metadata.get("strategy", "unknown")
+            chunk.metadata["strategy"]
             for chunk in chunks
         }
 
-        strategy = (
-            next(iter(strategies))
-            if len(strategies) == 1
-            else "mixed"
-        )
+        if len(strategies) != 1:
+            raise ValueError(
+                f"cannot index chunks from mixed strategies: {sorted(strategies)}"
+            )
+
+        strategy = next(iter(strategies))
 
         dimension = embeddings.shape[1]
 
         artifact_id = (
             f"faiss-{model_short}-{strategy}-{dimension}"
+        )
+        corpus_hash = self._get_corpus_hash(chunks)
+        chunk_config_hash = self._get_chunk_config_hash(chunks)
+
+        index_version = (
+            f"{model_short}-{dimension}-"
+            f"{chunks[0].metadata['chunker_version']}"
         )
         artifact = IndexArtifact(
             artifact_id=artifact_id,
@@ -246,7 +347,10 @@ class FaissIndexBuilder:
             location=str(self.index_dir),
             chunk_count=len(chunks),
             metadata={
+                "corpus_hash": corpus_hash,
+                "chunk_config_hash": chunk_config_hash,
                 "embedding_model": self.model_name,
+                "index_version": index_version,
                 "dimension": str(embeddings.shape[1]),
                 "device": device,
                 "build_time_seconds": f"{build_time:.4f}",
@@ -348,7 +452,9 @@ class FaissIndexBuilder:
             artifact = IndexArtifact.model_validate(
                 artifact_data
             )
-
+            self._validate_loaded_artifact(artifact)
+        except ArtifactMismatchError:
+            raise
         except Exception as exc:
             raise IndexUnavailableError(
                 f"failed to load FAISS index: {exc}"
