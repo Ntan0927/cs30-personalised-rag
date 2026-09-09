@@ -35,25 +35,62 @@ carry their text:
 
 ```python
 SEPARATOR = "\n\n"
-parts, blocks, offset = [], [], 0
+parts, blocks, chapter_ranges, offset = [], [], {}, 0
 for record in parsed_records:
     char_start = offset
     char_end = char_start + len(record.text)
     parts.append(record.text)
     blocks.append(
         TextBlock(
+            block_id=record.record_id,
             chapter_id=record.chapter_id,
             section_id=record.section_id,
-            content_type=record.content_type,
+            section_title=record.section_title,
+            content_type=content_type_for_record(record),
             char_start=char_start,
             char_end=char_end,
-            page_start=record.page_start,
-            page_end=record.page_end,
+            page_start=record.pdf_page,
+            page_end=record.pdf_page,
+            metadata=_block_metadata(record),
         )
     )
+    chapter = chapter_ranges.setdefault(
+        record.chapter_id,
+        {
+            "title": record.chapter_title,
+            "char_start": char_start,
+            "char_end": char_end,
+            "page_start": record.pdf_page,
+            "page_end": record.pdf_page,
+        },
+    )
+    # A chapter spans its first block through its last block.
+    chapter["char_end"] = char_end
+    chapter["page_start"] = min(chapter["page_start"], record.pdf_page)
+    chapter["page_end"] = max(chapter["page_end"], record.pdf_page)
     offset = char_end + len(SEPARATOR)
 document_text = SEPARATOR.join(parts)
+chapters = [
+    TextbookChapter(
+        chapter_id=chapter_id,
+        title=chapter["title"],
+        char_start=chapter["char_start"],
+        char_end=chapter["char_end"],
+        page_start=chapter["page_start"],
+        page_end=chapter["page_end"],
+    )
+    for chapter_id, chapter in chapter_ranges.items()
+]
 ```
+
+`parsed_records` must be in document order and grouped by chapter. Each chapter
+must have at least one block. Its `char_start` is the first block's start and its
+`char_end` is the last block's end; this keeps every block inside the chapter
+span required by `TextbookDocument.validate_block_spans()`.
+In the current OpenStax adapter, `record_id` becomes `block_id`, `pdf_page`
+becomes the block page span, and `content_type_for_record()` plus
+`_block_metadata()` perform the provider-specific mappings shown above. A CK-12
+adapter must provide equivalent mappings for its own intermediate records.
 
 The parser must preserve chapter order, titles, body text, content type,
 section IDs, and page information while assigning spans. The contract layer
