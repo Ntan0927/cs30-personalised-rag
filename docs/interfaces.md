@@ -30,6 +30,10 @@ refers to, and `blocks`, the structure the parser recovered.
 for the v1.0 `OpenStaxDocument` and `OpenStaxChapter` classes. Existing payloads
 and downstream code remain valid while the ingestion catalogue adds OpenStax and
 CK-12 source profiles.
+These aliases provide naming compatibility only; they do not identify the
+provider or add provider-specific validation. Adding provider-specific fields or
+validation to the serialized contract requires a separately reviewed schema
+revision and migration.
 
 A `TextBlock` holds **offsets only, never its own copy of the text**. Two copies
 of the same string can drift apart; one string plus a span cannot. Read a

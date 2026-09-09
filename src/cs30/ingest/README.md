@@ -9,6 +9,10 @@ parse(source: Path) -> TextbookDocument
 `TextbookDocument` is the provider-neutral public name for the frozen v1.0
 contract. `OpenStaxDocument` remains available as a compatibility name, so the
 alias does not change the payload schema or the character-span convention.
+The aliases provide naming compatibility only: they do not discriminate
+providers or add provider-specific validation. A future provider discriminator
+or provider-specific payload field requires a separately reviewed contract
+revision and migration.
 
 `src/cs30/ingest/textbooks.py` is the source catalogue. It records the stable
 textbook ID, display title, provider, source reference, subject, licence, and
@@ -20,6 +24,51 @@ Textbook selection is configuration of a parser adapter. It is not an extra
 argument to `DocumentParser.parse()`, which keeps the existing `BuildDeps` and
 `run_build_pipeline()` seam stable. A later M2 build adapter can be configured
 with a `textbook_id` and resolve its `TextbookSpec` through `get_textbook()`.
+
+## Parser output contract
+
+The parser must produce one shared coordinate system for the complete
+`TextbookDocument.text` string. `TextBlock` stores offsets and structure, not a
+second copy of the block text. The following is the parser-side construction
+pattern; `parsed_records` are provider-specific intermediate records that still
+carry their text:
+
+```python
+SEPARATOR = "\n\n"
+parts, blocks, offset = [], [], 0
+for record in parsed_records:
+    char_start = offset
+    char_end = char_start + len(record.text)
+    parts.append(record.text)
+    blocks.append(
+        TextBlock(
+            chapter_id=record.chapter_id,
+            section_id=record.section_id,
+            content_type=record.content_type,
+            char_start=char_start,
+            char_end=char_end,
+            page_start=record.page_start,
+            page_end=record.page_end,
+        )
+    )
+    offset = char_end + len(SEPARATOR)
+document_text = SEPARATOR.join(parts)
+```
+
+The parser must preserve chapter order, titles, body text, content type,
+section IDs, and page information while assigning spans. The contract layer
+must never strip or otherwise re-normalise `TextbookDocument.text`; changing
+normalisation requires a new `parser_version`, a new document hash, and fresh
+chunks and indexes.
+
+## Week 1 parser acceptance
+
+- The same input produces byte-identical normalised text on repeated parses.
+- Chapters, titles, and body text remain aligned with their recorded spans.
+- Every document records `document_hash` and `parser_version`.
+- Every demo chunk can be traced back to its textbook source span.
+- Each structural unit emits a `TextBlock` with `content_type`, `section_id`,
+  and page information when the source provides it.
 
 The exact local source file remains part of reproducibility. A real parser/build
 PR must record its SHA-256, parser version, selected chapters, source URL,
