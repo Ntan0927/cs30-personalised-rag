@@ -33,6 +33,34 @@ reconstructing block membership from character offsets alone.
 `candidate_pool_v0_1.review_labeled.csv` file records M3's manual accept
 decisions, but it is not an independent M2 provenance review.
 
+## Known Limitations
+
+These are deliberate limits of the v0.1 batch, not data errors. Read them
+before consuming the file.
+
+- **Answer position is not randomised.** Every record has `gold_answer: "D"`,
+  because options are emitted in the fixed order `distractor3`, `distractor1`,
+  `distractor2`, `correct_answer`. An "always answer D" baseline therefore
+  scores 100 percent. Do not report answer accuracy from this file until
+  option order is shuffled deterministically, seeded by `question_id`.
+- **No unanswerable records.** All 20 records are `answerable: true`, so this
+  batch cannot exercise the abstention confusion table (correct abstention,
+  answered-when-unanswerable).
+- **Lexical selection bias.** Candidates were kept when the answer string
+  appeared verbatim in a top OpenStax span, which favours 18 identification
+  questions out of 20. Do not use this batch to compare BM25, dense, and
+  hybrid retrieval quality.
+- **Accepted candidates only.** `candidate_pool_v0_1.review_labeled.csv`
+  records the 20 accepted items; rejected and unalignable candidates are not
+  logged here, so selection bias cannot be audited from it.
+- **Char spans assume a per-chapter parse.** Offsets are relative to the
+  document `text` of a parser run covering one chapter. A multi-chapter run
+  produces different offsets; map through `block_id` when offsets cannot be
+  guaranteed.
+
+Randomised option order and unanswerable records are the first targets for
+Gold v0.2.
+
 ## First-Step Contract
 
 M1/M8 should be able to load each JSONL object using these stable fields:
