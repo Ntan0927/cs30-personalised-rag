@@ -13,9 +13,30 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from cs30.contracts import RetrievalMode
 from cs30.errors import ConfigError
 
 DEFAULT_ENVIRONMENT = "development"
+
+
+def _load_local_env(path: Path | None = None) -> None:
+    """Load simple KEY=VALUE entries from an ignored local ``.env`` file."""
+
+    candidate = path or (Path.cwd() / ".env")
+    if not candidate.is_file():
+        return
+    for raw_line in candidate.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        if not key:
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
 
 
 class RetrievalConfig(BaseModel):
@@ -23,6 +44,17 @@ class RetrievalConfig(BaseModel):
 
     top_k: int = Field(default=5, gt=0)
     index_type: str = "IndexFlatIP"
+    mode: RetrievalMode = RetrievalMode.HYBRID
+    index_dir: str = "data/index"
+    rrf_k: int = Field(default=60, gt=0)
+    rrf_input_top_k: int = Field(default=20, gt=0)
+    bm25_min_score: float = Field(default=0.0, ge=0.0)
+    bm25_stopwords: bool = True
+    dense_min_similarity: float | None = Field(
+        default=None,
+        ge=-1.0,
+        le=1.0,
+    )
 
 
 class GenerationConfig(BaseModel):
@@ -75,34 +107,50 @@ def _read_toml(environment: str) -> dict:
 
 
 def _apply_env_overrides(payload: dict) -> dict:
+    def assign(keys: tuple[str, ...], value: object) -> None:
+        target = payload
+        for key in keys[:-1]:
+            target = target.setdefault(key, {})
+        target[keys[-1]] = value
+
     def scalar(env_name: str, *keys: str) -> None:
         raw = os.environ.get(env_name)
         if raw is None or raw == "":
             return
-        target = payload
-        for key in keys[:-1]:
-            target = target.setdefault(key, {})
-        target[keys[-1]] = raw
+        assign(keys, raw)
+
+    def boolean(env_name: str, *keys: str) -> None:
+        raw = os.environ.get(env_name)
+        if not raw:
+            return
+        normalised = raw.strip().lower()
+        if normalised in {"1", "true", "yes", "on"}:
+            assign(keys, True)
+        elif normalised in {"0", "false", "no", "off"}:
+            assign(keys, False)
+        else:
+            raise ConfigError(
+                f"{env_name} must be one of: "
+                "1, true, yes, on, 0, false, no, off"
+            )
 
     scalar("CS30_LOG_LEVEL", "log_level")
     scalar("CS30_TOP_K", "retrieval", "top_k")
+    scalar("CS30_RETRIEVAL_MODE", "retrieval", "mode")
+    scalar("CS30_INDEX_DIR", "retrieval", "index_dir")
+    scalar("CS30_RRF_K", "retrieval", "rrf_k")
+    scalar("CS30_RRF_INPUT_TOP_K", "retrieval", "rrf_input_top_k")
+    scalar("CS30_BM25_MIN_SCORE", "retrieval", "bm25_min_score")
+    scalar(
+        "CS30_DENSE_MIN_SIMILARITY",
+        "retrieval",
+        "dense_min_similarity",
+    )
+    boolean("CS30_BM25_STOPWORDS", "retrieval", "bm25_stopwords")
     scalar("LLM_PROVIDER", "generation", "provider")
     scalar("LLM_MODEL", "generation", "model")
 
-    fixture_mode = os.environ.get("CS30_FIXTURE_MODE")
-    if fixture_mode:
-        normalised = fixture_mode.strip().lower()
-        true_values = {"1", "true", "yes", "on"}
-        false_values = {"0", "false", "no", "off"}
-        if normalised in true_values:
-            payload["fixture_mode"] = True
-        elif normalised in false_values:
-            payload["fixture_mode"] = False
-        else:
-            raise ConfigError(
-                "CS30_FIXTURE_MODE must be one of: "
-                "1, true, yes, on, 0, false, no, off"
-            )
+    boolean("CS30_FIXTURE_MODE", "fixture_mode")
     return payload
 
 
@@ -113,6 +161,7 @@ def load_config(environment: str | None = None) -> AppConfig:
     ``development``.
     """
 
+    _load_local_env()
     resolved = environment or os.environ.get("CS30_ENV") or DEFAULT_ENVIRONMENT
     payload = _read_toml(resolved)
     payload.setdefault("environment", resolved)

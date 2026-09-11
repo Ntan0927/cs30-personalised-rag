@@ -8,6 +8,8 @@ through ``BuildDeps`` or ``PipelineDeps``; orchestration functions do not change
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 import time
 import uuid
@@ -16,10 +18,13 @@ from pathlib import Path
 from typing import Literal
 
 from cs30.chunking import FixtureChunker
-from cs30.citation import validate_citations
+from cs30.citation import (
+    CitationResolver,
+    EvidenceContextBuilder,
+)
 from cs30.config import AppConfig, load_config
-from cs30.contracts import IndexArtifact, PipelineRun, RetrievalHit, StudentLevel
-from cs30.errors import ConfigError, CS30Error, EmptyQueryError
+from cs30.contracts import IndexArtifact, PipelineRun, RetrievalMode, StudentLevel
+from cs30.errors import ConfigError, CS30Error, EmptyQueryError, IndexUnavailableError
 from cs30.generation import (
     CombinedEvidenceRetriever,
     FixtureAnswerGenerator,
@@ -41,7 +46,12 @@ from cs30.ports import (
     Retriever,
 )
 from cs30.profile import FixtureProfileProvider, Week1ProfileProvider
-from cs30.retrieval import FixtureRetriever
+from cs30.retrieval import (
+    BM25Retriever,
+    FaissDenseRetriever,
+    FixtureRetriever,
+    RealRetrievalService,
+)
 
 LOGGER = get_logger("pipeline")
 
@@ -121,16 +131,72 @@ def run_build_pipeline(source: Path, deps: BuildDeps) -> IndexArtifact:
 
 
 def build_real_deps(config: AppConfig) -> PipelineDeps:
-    """Build configured generation over the available fixture evidence."""
+    """Use real retrieval when an index exists, otherwise preserve fixture mode."""
 
-    dataset = build_all_dataset_items(StudentLevel.INTERMEDIATE)
-    evidence_by_id: dict[str, RetrievalHit] = {}
-    for item in dataset.items:
-        for hit in item.retrieval.hits:
-            evidence_by_id.setdefault(hit.chunk_id, hit)
-    retriever = CombinedEvidenceRetriever(evidence_by_id.values())
+    index_dir = Path(config.retrieval.index_dir)
+    artifact_path = index_dir / "artifact.json"
+
+    if not artifact_path.is_file():
+        if not config.fixture_mode:
+            raise IndexUnavailableError(
+                f"IndexArtifact not found at {artifact_path}"
+            )
+
+        dataset = build_all_dataset_items(StudentLevel.INTERMEDIATE)
+        evidence_by_id = {}
+
+        for item in dataset.items:
+            for hit in item.retrieval.hits:
+                evidence_by_id.setdefault(hit.chunk_id, hit)
+
+        retriever = CombinedEvidenceRetriever(evidence_by_id.values())
+        dependency_mode: Literal["fixture", "real"] = "fixture"
+
+    else:
+        try:
+            artifact = IndexArtifact.model_validate_json(
+                artifact_path.read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError) as exc:
+            raise IndexUnavailableError(
+                f"failed to load IndexArtifact from {artifact_path}: {exc}"
+            ) from exc
+
+        artifact = IndexArtifact.model_validate(
+            {
+                **artifact.model_dump(),
+                "location": str(index_dir),
+            }
+        )
+
+        retrieval_mode = config.retrieval.mode
+
+        dense_retriever = FaissDenseRetriever(
+            min_similarity=config.retrieval.dense_min_similarity,
+        )
+        bm25_retriever = BM25Retriever(
+            min_score=config.retrieval.bm25_min_score,
+            # An empty set disables query-side filtering; None keeps the default
+            # list. This is knob A2 in docs/retrieval-ablation-plan.md.
+            stopwords=None if config.retrieval.bm25_stopwords else frozenset(),
+        )
+
+        retrieval_service = RealRetrievalService(
+            dense=dense_retriever,
+            bm25=bm25_retriever,
+            rrf_k=config.retrieval.rrf_k,
+            input_top_k=config.retrieval.rrf_input_top_k,
+        )
+
+        retrieval_service.load_index(
+            artifact,
+            retrieval_mode,
+        )
+        retriever = retrieval_service.backend(retrieval_mode)
+        dependency_mode = "real"
 
     provider = config.generation.provider.casefold()
+
     if provider == "mock":
         client = MockJsonLLMClient()
     elif provider == "ollama":
@@ -141,6 +207,7 @@ def build_real_deps(config: AppConfig) -> PipelineDeps:
     elif provider == "openai":
         if not config.generation.model:
             raise ConfigError("LLM_MODEL is required when LLM_PROVIDER=openai")
+
         client = OpenAIResponsesClient(
             config.generation.model,
             temperature=config.generation.temperature,
@@ -152,7 +219,7 @@ def build_real_deps(config: AppConfig) -> PipelineDeps:
         )
 
     return PipelineDeps(
-        mode="fixture",
+        mode=dependency_mode,
         profile_provider=Week1ProfileProvider(profile_prefix="local-rag"),
         retriever=retriever,
         generator=PersonalisedAnswerGenerator(
@@ -188,8 +255,20 @@ def run_pipeline(
         retrieval_ms,
     )
 
+    run_id = uuid.uuid4().hex[:12]
+    evidence_bundle = EvidenceContextBuilder().build(
+        retrieval,
+        retrieval_mode=retrieval.mode,
+        run_provenance={
+            "run_id": run_id,
+            "environment": config.environment,
+            "mode": deps.mode,
+        },
+    )
+    # M8 owns the evidence bundle and post-generation governance. Member 7's
+    # generator keeps its existing RetrievalResult interface until the team
+    # explicitly approves a bundle-consumer contract.
     answer = deps.generator.generate(question, profile, retrieval)
-    validate_citations(answer, retrieval)
     LOGGER.info(
         "generation level=%s abstained=%s citations=%d",
         profile.level.value,
@@ -197,6 +276,48 @@ def run_pipeline(
         len(answer.citations),
     )
 
+    validated_answer = CitationResolver().resolve(answer, evidence_bundle)
+    run_trace = {
+        "request_id": run_id,
+        "query": question,
+        "profile_level": profile.level.value,
+        "retrieval_mode": retrieval.mode.value,
+        "retrieved_ids": ",".join(hit.chunk_id for hit in retrieval.hits),
+        "selected_evidence_ids": ",".join(
+            item.evidence_id for item in evidence_bundle.evidence_items
+        ),
+        "citation_ids": ",".join(answer.citations),
+        "context_token_count": str(evidence_bundle.token_count),
+        "context_hash": hashlib.sha256(
+            (evidence_bundle.prompt_context or "").encode("utf-8")
+        ).hexdigest(),
+        "corpus_version": (
+            retrieval.provenance.corpus_hash
+            if retrieval.provenance is not None
+            else ("fixture-corpus-v1" if deps.mode == "fixture" else "unknown")
+        ),
+        "index_version": (
+            retrieval.provenance.index_version
+            if retrieval.provenance is not None
+            else ("fixture-index-v1" if deps.mode == "fixture" else "unknown")
+        ),
+        "artifact_version": str(
+            getattr(deps.retriever, "artifact_version", None)
+            or ("fixture-artifact-v1" if deps.mode == "fixture" else "unknown")
+        ),
+    }
+    LOGGER.info(
+        "trace request_id=%s query=%r profile_level=%s retrieved_ids=%s "
+        "selected_ids=%s citation_ids=%s context_hash=%s",
+        run_trace["request_id"],
+        run_trace["query"],
+        run_trace["profile_level"],
+        run_trace["retrieved_ids"],
+        run_trace["selected_evidence_ids"],
+        run_trace["citation_ids"],
+        run_trace["context_hash"],
+    )
+    LOGGER.info("trace_json=%s", json.dumps(run_trace, ensure_ascii=False, sort_keys=True))
     metadata = {
         "environment": config.environment,
         "top_k": str(config.retrieval.top_k),
@@ -206,23 +327,25 @@ def run_pipeline(
         "provider": config.generation.provider,
         "retrieval_ms": f"{retrieval_ms:.1f}",
     }
-    trace = getattr(deps.generator, "last_trace", None)
-    if trace is not None and callable(getattr(trace, "to_metadata", None)):
-        metadata.update(trace.to_metadata())
+    generation_trace = getattr(deps.generator, "last_trace", None)
+    if generation_trace is not None and callable(getattr(generation_trace, "to_metadata", None)):
+        metadata.update(generation_trace.to_metadata())
     evidence_count = getattr(deps.retriever, "evidence_count", None)
     if evidence_count is not None:
         metadata["corpus_evidence_count"] = str(evidence_count)
-
     return PipelineRun(
-        run_id=uuid.uuid4().hex[:12],
+        run_id=run_id,
         mode=deps.mode,
         question=question,
         question_id=question_id,
         profile=profile,
         retrieval=retrieval,
         answer=answer,
-        citation_integrity="passed",
+        citation_integrity=validated_answer.citation_status,
         metadata=metadata,
+        evidence_bundle=evidence_bundle,
+        validated_answer=validated_answer,
+        trace=run_trace,
     )
 
 
@@ -256,6 +379,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Number of evidence passages to retrieve",
     )
     parser.add_argument(
+        "--retrieval-mode",
+        choices=[
+            RetrievalMode.BM25.value,
+            RetrievalMode.DENSE.value,
+            RetrievalMode.HYBRID.value,
+        ],
+        default=None,
+        help="Real retrieval backend: bm25, dense, or hybrid",
+    )
+    parser.add_argument(
         "--answer-only",
         action="store_true",
         help="Print only the final explanation and suppress informational logs",
@@ -287,6 +420,14 @@ def main() -> None:
                 update={
                     "retrieval": config.retrieval.model_copy(
                         update={"top_k": args.top_k}
+                    )
+                }
+            )
+        if args.retrieval_mode is not None:
+            config = config.model_copy(
+                update={
+                    "retrieval": config.retrieval.model_copy(
+                        update={"mode": RetrievalMode(args.retrieval_mode)}
                     )
                 }
             )

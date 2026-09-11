@@ -16,6 +16,8 @@ __all__ = ["FaissIndexBuilder", "FixtureIndexBuilder"]
 
 
 def __getattr__(name: str) -> object:
+    """Import the FAISS builder on first use so the core install stays light."""
+
     if name == "FaissIndexBuilder":
         from .faiss_index import FaissIndexBuilder
 

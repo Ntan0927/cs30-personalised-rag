@@ -56,7 +56,19 @@ Windows (PowerShell):
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,ui]"
+```
+
+Optional local configuration can be created from the safe template. The
+application reads this ignored `.env` file without overriding variables already
+set by the shell or deployment platform:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+```bash
+cp .env.example .env
 ```
 
 macOS and Linux:
@@ -64,8 +76,22 @@ macOS and Linux:
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,ui]"
 ```
+
+For the exact dependency versions used by the verified development environment,
+install `requirements.lock` first and then install the local package without
+re-resolving dependencies:
+
+```bash
+python -m pip install -r requirements.lock
+python -m pip install -e . --no-deps
+```
+
+The lock file excludes the editable local package and records the current
+Windows/Python 3.12 environment. The `pyproject.toml` command above remains
+the normal choice for editable development or other platforms until the team
+adopts a cross-platform lock format.
 
 Then, on any platform:
 
@@ -78,6 +104,39 @@ python -m pytest
 returns a `PipelineRun` JSON object: question, student level, Top-K evidence,
 generated answer, verified citations, and run metadata.
 
+### Demo interface
+
+The simplest startup path is the repository-root launcher. It creates `.venv`
+and installs the project on first use, then opens the Streamlit interface.
+
+Windows — double-click `start_demo.cmd`, or run:
+
+```powershell
+.\start_demo.cmd
+```
+
+Equivalent `.bat` aliases are included for environments that prefer that
+extension.
+
+macOS and Linux:
+
+```bash
+chmod +x start_demo.sh start_staging_preview.sh
+./start_demo.sh
+```
+
+The equivalent manual command is:
+
+```bash
+python -m streamlit run src/cs30/ui/app.py
+```
+
+The browser interface lets a client choose a student level, ask a question, and
+inspect the generated answer, citations, and retrieved sources. The current page
+runs in fixture mode and labels that mode prominently; it must not be presented as
+a real retrieval or model result. The W5 evidence layer assigns display IDs (`E1`,
+`E2`, ...), maps them back to chunk IDs, and records a compact trace for each run.
+
 Ask something the sample chapter does not cover and the system refuses instead
 of inventing an answer:
 
@@ -87,7 +146,7 @@ cs30-demo --question "What is quantum entanglement?" --level advanced
 
 Useful flags: `--level beginner|intermediate|advanced`, `--env
 development|staging`, `--mode fixture|real`, `--provider mock|ollama|openai`,
-`--model`, and `--top-k`.
+`--model`, `--top-k`, and `--retrieval-mode bm25|dense|hybrid`.
 
 To ask an arbitrary question through the combined local RAG corpus and the
 installed Ollama model:
@@ -98,13 +157,11 @@ python -m cs30.pipeline --mode real --provider ollama --model gpt-oss:20b \
   --level beginner --top-k 3
 ```
 
-The portable retriever searches every available evidence passage while keeping
-the frozen `Retriever` and `AnswerGenerator` interfaces unchanged. It returns
-an empty result for insufficient matches, causing a grounded abstention rather
-than an unrelated answer. This is a local engineering path, not a formal
-retrieval-effectiveness result. Although `--mode real` selects the configured
-model-provider path, its `PipelineRun` and retrieval output remain labelled
-`fixture` until the real Member 6 retriever and index are connected.
+The real retriever reads Member 5's `artifact.json`, `chunks.json`, and
+`index.faiss` from the configured local index directory. It keeps the frozen
+`Retriever` and `AnswerGenerator` interfaces unchanged and supports BM25,
+Dense, and RRF Hybrid retrieval. Real runs are labelled `real` in
+`PipelineRun`.
 
 For a concise terminal answer, omit `--top-k` to use the configured default of
 3 and add `--answer-only`:
@@ -150,6 +207,48 @@ environment runs stand-in modules and prints a banner saying so. `PipelineRun.mo
 records it in the output. **A fixture run must never be presented as a real
 result**, and CI enforces the behavioural guarantees that make it safe to show.
 
+### Staging preview
+
+Before the real Member 6 and 7 adapters are integrated, use the honest,
+fixture-backed staging preview:
+
+```powershell
+.\start_staging_preview.cmd
+```
+
+```bash
+./start_staging_preview.sh
+```
+
+This loads the staging configuration while forcing fixture mode and labels the
+page `STAGING PREVIEW · FIXTURE MODE`. It is suitable for checking startup,
+configuration and the client demonstration sequence, but it is not the real
+retriever or LLM. See [the staging integration plan](docs/staging-integration-plan.md)
+for the proposed real-adapter boundary and deployment decision.
+
+### Smoke test
+
+Run the dedicated runnable-path smoke gate:
+
+```bash
+python -m pytest -m smoke
+```
+
+It checks Streamlit startup and submission, fixture index loading, the Retriever
+interface, JSON round-trip validation, citation integrity, staging-preview
+configuration and file logging. These checks prove runnability only; they do
+not report retrieval or model quality.
+
+### Logs, demo instructions and help
+
+Runtime logs are written to the terminal and to `logs/cs30.log`. The file
+rotates at approximately 1 MB and keeps three backups. Override its directory
+with `CS30_LOG_DIR` if required.
+
+- [Customer and tutor demonstration runbook](docs/customer-demo-runbook.md)
+- [Common errors, log locations and recovery steps](docs/troubleshooting.md)
+- [Real staging integration proposal](docs/staging-integration-plan.md)
+
 ## Repository layout
 
 ```text
@@ -161,11 +260,11 @@ src/cs30/configs/       Packaged development and staging configuration
 src/cs30/logging.py     Shared logging setup
 src/cs30/errors.py      Typed errors
 src/cs30/fixtures/      Small, non-sensitive fixtures, shipped with the package
-src/cs30/ingest/        Member 2  - OpenStax parsing
+src/cs30/ingest/        Member 2  - textbook catalogue and parsing boundary
 src/cs30/questions/     Member 3  - validated SciQ demo questions
 src/cs30/chunking/      Member 4  - chunking and metadata
 src/cs30/indexing/      Member 5  - embeddings and FAISS
-src/cs30/retrieval/     Member 6  - dense retrieval
+src/cs30/retrieval/     Member 6  - Dense, BM25, and RRF hybrid retrieval
 src/cs30/profile/       Member 7  - student profile
 src/cs30/generation/    Member 7  - prompting and LLM generation
 src/cs30/ui/            Member 8  - demo interface
@@ -180,8 +279,8 @@ and week 1 acceptance criteria.
 ## Adding your module
 
 1. Implement your Protocol from `src/cs30/ports.py` next to the `fixture.py` in
-   your package. Member 8 consumes `PipelineRun` directly instead of implementing
-   a Protocol.
+   your package. Member 8 consumes `PipelineRun` and its `EvidenceBundle` directly
+   instead of implementing a computational Protocol.
 2. Offline modules (members 2, 4, and 5) are supplied through `BuildDeps` to
    `run_build_pipeline()`. Online modules (members 6 and 7) are supplied through
    `PipelineDeps` to `run_pipeline()`. Neither orchestration function changes.
@@ -202,13 +301,16 @@ and week 1 acceptance criteria.
 
 The first contract version includes:
 
-- `OpenStaxDocument`
+- `TextbookDocument` (`OpenStaxDocument` compatibility alias)
 - `Chunk`
 - `IndexArtifact`
 - `SciQQuestion`
 - `RetrievalResult`
+- `EvidenceItem`
+- `EvidenceBundle`
 - `StudentProfile`
 - `GeneratedAnswer`
+- `ValidatedAnswer`
 - `PipelineRun`
 
 See [docs/interfaces.md](docs/interfaces.md) for ownership and field semantics,
