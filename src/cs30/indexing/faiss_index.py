@@ -62,18 +62,25 @@ class FaissIndexBuilder:
 
         counter = self.token_counter()
 
+        special_tokens = 2
+        content_limit = max(limit - special_tokens, 1)
+
         over_limit = [
             chunk.chunk_id
             for chunk in chunks
-            if counter.count(chunk.embedding_input) > limit
+            if counter.count(chunk.embedding_input) > content_limit
         ]
 
         if over_limit:
             LOGGER.warning(
-                "%d/%d chunks exceed max_seq_length=%d and may be truncated",
+                "%d/%d chunks exceed effective content token limit=%d "
+                "(model max_seq_length=%d, reserved special tokens=%d) "
+                "and may be truncated",
                 len(over_limit),
                 len(chunks),
+                content_limit,
                 limit,
+                special_tokens,
             )
 
     def _embed_chunks(self, chunks: list[Chunk]) -> np.ndarray:
