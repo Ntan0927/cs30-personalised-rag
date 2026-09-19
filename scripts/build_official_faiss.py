@@ -130,11 +130,6 @@ def main() -> int:
 
     query_instruction = get_query_instruction(args.model)
 
-    builder = FaissIndexBuilder(
-        model_name=args.model,
-        index_dir=output_dir,
-        query_instruction=query_instruction,
-    )
 
 
     if not args.corpus_dir.is_dir():
@@ -209,6 +204,15 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+
+    query_instruction = get_query_instruction(args.model)
+
+    builder = FaissIndexBuilder(
+        model_name=args.model,
+        index_dir=output_dir,
+        query_instruction=query_instruction,
+        corpus_id=expected_corpus_id,
+    )
 
 
     print()
@@ -296,6 +300,8 @@ def main() -> int:
     print()
     print("Official M5 FAISS index build and reload verification passed.")
     return 0
+
+
         
 
 
