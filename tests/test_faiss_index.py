@@ -355,3 +355,36 @@ def test_faiss_builder_implements_index_builder_protocol(
 
     assert isinstance(builder, IndexBuilder)
 
+def test_load_rejects_reordered_chunk_map(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Loading should reject a persisted chunk map with changed order."""
+
+    builder = make_builder(
+        monkeypatch,
+        tmp_path,
+    )
+
+    builder.build(make_test_chunks())
+
+    chunk_map_path = tmp_path / "chunks.json"
+
+    with chunk_map_path.open("r", encoding="utf-8") as file:
+        chunk_map = json.load(file)
+
+    chunk_map[0], chunk_map[1] = chunk_map[1], chunk_map[0]
+
+    with chunk_map_path.open("w", encoding="utf-8") as file:
+        json.dump(chunk_map, file, indent=2)
+
+    reloaded_builder = make_builder(
+        monkeypatch,
+        tmp_path,
+    )
+
+    with pytest.raises(
+        ArtifactMismatchError,
+        match="chunk order",
+    ):
+        reloaded_builder.load()

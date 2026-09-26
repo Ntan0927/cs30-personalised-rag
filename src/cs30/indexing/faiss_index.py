@@ -156,7 +156,18 @@ class FaissIndexBuilder:
             return "text"
 
         return "mixed"
-        
+    @staticmethod
+    def _get_chunk_order_hash(chunk_ids: list[str]) -> str:
+        """Return a stable hash for the ordered chunk ID sequence."""
+
+        payload = json.dumps(
+            chunk_ids,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+
+        return f"sha256:{hashlib.sha256(payload).hexdigest()}"    
+    
     def _get_corpus_hash(self, chunks: list[Chunk]) -> str:
         """Build a stable identity for the corpus and parser version."""
 
@@ -256,6 +267,17 @@ class FaissIndexBuilder:
             raise ArtifactMismatchError(
                 "saved index corpus_id does not match the expected corpus_id"
             )
+        saved_chunk_order_hash = artifact.metadata.get("chunk_order_hash")
+
+        if saved_chunk_order_hash is not None:
+            actual_chunk_order_hash = self._get_chunk_order_hash(
+                [chunk.chunk_id for chunk in self._chunks]
+            )
+
+            if actual_chunk_order_hash != saved_chunk_order_hash:
+                raise ArtifactMismatchError(
+                    "saved chunk order does not match persisted index metadata"
+                )
         
     def build(
         self,
@@ -367,7 +389,9 @@ class FaissIndexBuilder:
         )
         corpus_hash = self._get_corpus_hash(chunks)
         chunk_config_hash = self._get_chunk_config_hash(chunks)
-
+        chunk_order_hash = self._get_chunk_order_hash(
+            [chunk.chunk_id for chunk in chunks]
+        )
         index_version = (
             f"{model_short}-{dimension}-"
             f"{chunks[0].metadata['chunker_version']}"
@@ -375,6 +399,7 @@ class FaissIndexBuilder:
         metadata = {
             "corpus_hash": corpus_hash,
             "chunk_config_hash": chunk_config_hash,
+            "chunk_order_hash": chunk_order_hash,
             "embedding_model": self.model_name,
             "query_instruction": self.query_instruction,
             "index_version": index_version,
@@ -416,6 +441,7 @@ class FaissIndexBuilder:
 
         if self._model is None:
             self._model = SentenceTransformer(self.model_name)
+
         return self._model
     
     def load(self) -> IndexArtifact:
