@@ -9,6 +9,7 @@ class EmbeddingModelConfig:
     batch_size: int
     query_instruction: str = ""
     passage_prefix: str = ""
+    trust_remote_code: bool = False
 
 
 EMBEDDING_MODELS = {
@@ -20,8 +21,8 @@ EMBEDDING_MODELS = {
         model_name="Alibaba-NLP/gte-modernbert-base",
         batch_size=4,
     ),
-    "e5-mistral": EmbeddingModelConfig(
-        model_name="intfloat/e5-mistral-7b-instruct",
-        batch_size=1,
+    "qwen3-embedding": EmbeddingModelConfig(
+        model_name="Qwen/Qwen3-Embedding-0.6B",
+        batch_size=2,
     ),
 }

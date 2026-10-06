@@ -51,12 +51,16 @@ class FaissIndexBuilder:
         expected_provenance: EvidenceProvenance | None = None,
         query_instruction: str = "",
         corpus_id: str | None = None,
+        batch_size: int = 4,
+        passage_prefix: str = "",
     ) -> None:
         self.model_name = model_name
         self.index_dir = Path(index_dir)
         self.expected_provenance = expected_provenance
         self.query_instruction = query_instruction
         self.corpus_id = corpus_id
+        self.batch_size = batch_size
+        self.passage_prefix = passage_prefix
 
         self._model: SentenceTransformer | None = None
 
@@ -105,15 +109,18 @@ class FaissIndexBuilder:
         # to the original chunk text otherwise.
         texts = [chunk.embedding_input for chunk in chunks]
 
-        if self.model_name == "intfloat/e5-base-v2":
-            texts = [f"passage: {text}" for text in texts]
+        if self.passage_prefix:
+            texts = [
+                f"{self.passage_prefix}{text}"
+                for text in texts
+            ]
 
         model = self._load_model()
         self._warn_if_truncated(chunks)
         embeddings = model.encode(
             texts,
             convert_to_numpy=True,
-            batch_size=4,
+            batch_size=self.batch_size,
         )
 
         return np.asarray(embeddings)
@@ -441,7 +448,6 @@ class FaissIndexBuilder:
 
         if self._model is None:
             self._model = SentenceTransformer(self.model_name)
-
         return self._model
     
     def load(self) -> IndexArtifact:
