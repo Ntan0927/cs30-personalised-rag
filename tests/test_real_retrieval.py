@@ -852,3 +852,31 @@ def test_real_service_rejects_result_without_provenance() -> None:
             top_k=5,
             mode=RetrievalMode.BM25,
         )
+
+def test_dense_query_input_without_instruction_is_unchanged() -> None:
+    retriever = real_retrieval.FaissDenseRetriever(
+        query_instruction="",
+    )
+    retriever._effective_instruction = ""
+
+    query = "What is photosynthesis?"
+
+    assert retriever._query_input(query) == query
+
+
+def test_dense_query_input_applies_qwen_instruction_template() -> None:
+    instruction = (
+        "Instruct: Given a web search query, retrieve relevant passages "
+        "that answer the query\nQuery:{query}"
+    )
+
+    retriever = real_retrieval.FaissDenseRetriever(
+        query_instruction=instruction,
+    )
+    retriever._effective_instruction = instruction
+
+    assert retriever._query_input("What is photosynthesis?") == (
+        "Instruct: Given a web search query, retrieve relevant passages "
+        "that answer the query\n"
+        "Query:What is photosynthesis?"
+    )
